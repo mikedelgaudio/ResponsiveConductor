@@ -15,10 +15,11 @@ function determineColumnWidthsDebugs(
   }
 
   // Check if the shrinkPriority is in consecutive order
-  const shrinkPriorities = schemas.map((schema) => schema.shrinkPriority);
-  shrinkPriorities.sort((a, b) => a - b);
-  for (let i = 0; i < shrinkPriorities.length - 1; i++) {
-    if (shrinkPriorities[i] + 1 !== shrinkPriorities[i + 1]) {
+  const sortedShrinkPriorities = schemas
+    .map((schema) => schema.shrinkPriority)
+    .sort((a, b) => a - b);
+  for (let i = 0; i < sortedShrinkPriorities.length - 1; i++) {
+    if (sortedShrinkPriorities[i] + 1 !== sortedShrinkPriorities[i + 1]) {
       throw new Error(
         "[ResponsiveConductor] You must have consecutive shrinkPriorities, input error!"
       );
@@ -88,43 +89,48 @@ export function determineColumnWidths(
   contentWidth: number,
   schemas: IResponsiveConductorSchema[]
 ): number[] {
-  // Initialize finalSizes object to store calculated widths mapped by unique keys
-  const finalSizes: { [key: string]: number } = {};
-
-  // If there are no schemas, return an empty array
+  // Early return if there are no schemas
   if (schemas.length === 0) {
     return [];
   }
 
-  // Check for errors in the schemas if in DEBUG mode
   if (DEBUG) {
     determineColumnWidthsDebugs(contentWidth, schemas);
   }
 
+  // Initialize widthMap object to store calculated widths mapped by unique keys
+  const widthMap: { [key: string]: number } = {};
+
   // Separate schemas into visible and hidden based on the isAllowedToHide flag
   const visibleSchemas: IResponsiveConductorSchema[] = [];
   const hiddenSchemas: IResponsiveConductorSchema[] = [];
+
+  // Iterate through schemas and classify them as visible or hidden
   for (const schema of schemas) {
     if (schema.isAllowedToHide) {
-      hiddenSchemas.push(schema);
+      hiddenSchemas.push(schema); // Add to hiddenSchemas if it can be hidden
     } else {
-      visibleSchemas.push(schema);
+      visibleSchemas.push(schema); // Add to visibleSchemas if it cannot be hidden
     }
   }
 
-  // Sort schemas by priority (ascending, lower numbers are higher priority) O(nlogn)
+  // Sort schemas by shrinkPriority (ascending, lower numbers are higher priority)
   visibleSchemas.sort((a, b) => a.shrinkPriority - b.shrinkPriority);
   hiddenSchemas.sort((a, b) => a.shrinkPriority - b.shrinkPriority);
 
-  // Calculate initial widths for visible schemas based on max width O(n)
+  // Calculate initial widths for visible schemas based on their maxWidth
   let initialWidths = visibleSchemas.map((schema) => schema.maxWidth);
-  const totalInitialWidth = initialWidths.reduce(
+
+  // Calculate remaining content width after accounting for initial widths
+  const totalInitialWidths = initialWidths.reduce(
     (acc, width) => acc + width,
     0
   );
-  let remainingContentWidth = contentWidth - totalInitialWidth;
+  let remainingContentWidth = contentWidth - totalInitialWidths;
 
-  // Shrink elements based on priority if needed to fit within content width O(n)
+  // If the total initial width exceeds available content width, shrink elements
+  // The backwards loop ensures that elements with higher indices, which are typically less critical
+  // are shrunk first. This preserves the widths of higher-priority elements as much as possible.
   if (remainingContentWidth < 0) {
     for (
       let i = visibleSchemas.length - 1;
@@ -132,39 +138,50 @@ export function determineColumnWidths(
       i--
     ) {
       const schema = visibleSchemas[i];
+
+      //This represents the maximum amount by which we can shrink this element.
       const excessWidth = initialWidths[i] - schema.minWidth;
+
+      // The smaller value between the negative of the remaining content width (the amount we need to reduce to fit within the content width) and the excessWidth.
+      // This ensures we do not shrink the element below its minimum width or reduce more than necessary to fit within the content width.
       const reduceBy = Math.min(-remainingContentWidth, excessWidth);
+
+      // We subtract reduceBy from the current width of the element.
       initialWidths[i] -= reduceBy;
+
+      // We add reduceBy to the remainingContentWidth, effectively reducing the negative deficit
+      // by the amount we have shrunk the element.
       remainingContentWidth += reduceBy;
     }
   }
 
-  // Attempt to reintroduce hidden elements if there is enough remaining content width O(n)
+  // Attempt to reintroduce hidden elements if there is enough remaining content width
   if (remainingContentWidth > 0) {
     for (const hidden of hiddenSchemas) {
       if (remainingContentWidth >= hidden.minWidth) {
-        visibleSchemas.push(hidden);
-        initialWidths.push(Math.min(hidden.maxWidth, remainingContentWidth));
-        remainingContentWidth -= initialWidths[initialWidths.length - 1];
+        visibleSchemas.push(hidden); // Add hidden schema to visibleSchemas
+        initialWidths.push(Math.min(hidden.maxWidth, remainingContentWidth)); // Set its width
+        remainingContentWidth -= initialWidths[initialWidths.length - 1]; // Update remaining width
       }
     }
   }
 
-  // Calculate the total minimum width required by all visible schemas O(n)
+  // Calculate the total minimum width required by all visible schemas
   const sumOfMinWidths = visibleSchemas.reduce(
     (acc, schema) => acc + schema.minWidth,
     0
   );
 
-  // If the total minimum width exceeds available content width, return minimum widths for all O(n)
+  // If the total minimum width exceeds available content width, return minimum widths for all
   if (sumOfMinWidths > contentWidth) {
     visibleSchemas.forEach((schema) => {
-      finalSizes[schema.key] = schema.minWidth;
+      widthMap[schema.key] = schema.minWidth; // Assign minimum widths
     });
-    return schemas.map((schema) => finalSizes[schema.key] ?? 0);
+    // Map final widths back to original keys to maintain the input order
+    return schemas.map((schema) => widthMap[schema.key] ?? 0);
   }
 
-  // Calculate the total maximum width required by all visible schemas O(n)
+  // Calculate the total maximum width required by all visible schemas
   const sumOfMaxWidths = visibleSchemas.reduce(
     (acc, schema) => acc + schema.maxWidth,
     0
@@ -172,7 +189,7 @@ export function determineColumnWidths(
 
   // If the content width is greater than or equal to the sum of maximum widths
   if (contentWidth >= sumOfMaxWidths) {
-    // Distribute the extra space proportionally among all visible schemas that are allowed to grow beyond max width O(n)
+    // Distribute the extra space proportionally among all visible schemas that are allowed to grow beyond max width
     const extraSpace = contentWidth - sumOfMaxWidths;
     const growableBeyondMaxSchemas = visibleSchemas.filter(
       (schema) => schema.isAllowedToGrowBeyondMaxWidth
@@ -180,22 +197,24 @@ export function determineColumnWidths(
     const numGrowableElements = growableBeyondMaxSchemas.length;
     const additionalWidthPerElement = extraSpace / numGrowableElements;
 
+    // Allocate the additional space to the schemas that are allowed to grow beyond max width
     visibleSchemas.forEach((schema, index) => {
       if (schema.isAllowedToGrowBeyondMaxWidth) {
         initialWidths[index] += additionalWidthPerElement;
       }
     });
 
-    // Update the finalSizes with the adjusted widths
+    // Update the widthMap with the adjusted widths
     visibleSchemas.forEach((schema, i) => {
-      finalSizes[schema.key] = initialWidths[i];
+      widthMap[schema.key] = initialWidths[i];
     });
 
-    return schemas.map((schema) => finalSizes[schema.key] ?? 0);
+    // Map final widths back to original keys to maintain the input order
+    return schemas.map((schema) => widthMap[schema.key] ?? 0);
   } else {
     // Distribute remaining content width after accounting for minimum widths
     remainingContentWidth = contentWidth - sumOfMinWidths;
-    const finalWidths = visibleSchemas.map((schema) => schema.minWidth);
+    const calculatedWidths = visibleSchemas.map((schema) => schema.minWidth);
 
     // Allocate additional space to each schema based on remaining available space
     for (
@@ -204,23 +223,23 @@ export function determineColumnWidths(
       i++
     ) {
       const schema = visibleSchemas[i];
-      const currentWidth = finalWidths[i];
+      const currentWidth = calculatedWidths[i];
       if (currentWidth < schema.maxWidth) {
         const additionalSpace = Math.min(
           schema.maxWidth - currentWidth,
           remainingContentWidth
         );
-        finalWidths[i] += additionalSpace;
-        remainingContentWidth -= additionalSpace;
+        calculatedWidths[i] += additionalSpace; // Increase width
+        remainingContentWidth -= additionalSpace; // Decrease remaining width
       }
     }
 
-    // Map final widths back to original keys to maintain the input order
+    // Update the widthMap with the adjusted widths
     visibleSchemas.forEach((schema, i) => {
-      finalSizes[schema.key] = finalWidths[i];
+      widthMap[schema.key] = calculatedWidths[i];
     });
 
-    // Return the widths mapped back to the original order using the unique keys
-    return schemas.map((schema) => finalSizes[schema.key] ?? 0);
+    // Map final widths back to original keys to maintain the input order
+    return schemas.map((schema) => widthMap[schema.key] ?? 0);
   }
 }
