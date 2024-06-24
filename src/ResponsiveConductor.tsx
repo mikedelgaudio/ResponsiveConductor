@@ -50,7 +50,7 @@ export function ResponsiveConductor(
 
     return (
       <Fragment>
-        <h2 class="text-3xl">Current conductor width: {contentWidth}px</h2>
+        <h3>Current conductor width: {contentWidth}px</h3>
         <h3>
           <i>Current grid-template-columns:</i>{" "}
           {gridTemplateColumnsOutput.join(" ")}

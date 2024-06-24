@@ -96,6 +96,10 @@ export function App() {
 
   return (
     <div ref={rootRef}>
+      <h1 class="text-3xl">ResponsiveConductor</h1>
+      <h2 class="text-2xl">HeaderBar</h2>
+      <ResponsiveConductor {...props} />
+      <h2 class="text-2xl">ContentBar</h2>
       <ResponsiveConductor {...props} />
     </div>
   );
