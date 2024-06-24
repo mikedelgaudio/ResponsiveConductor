@@ -14,6 +14,17 @@ function determineColumnWidthsDebugs(
     return;
   }
 
+  // Check if the shrinkPriority is in consecutive order
+  const shrinkPriorities = schemas.map((schema) => schema.shrinkPriority);
+  for (let i = 0; i < shrinkPriorities.length - 1; i++) {
+    if (shrinkPriorities[i] + 1 !== shrinkPriorities[i + 1]) {
+      throw new Error(
+        "[ResponsiveConductor] You must have consecutive shrinkPriorities, input error!"
+      );
+    }
+  }
+
+  // Check if the sum of minWidths is greater than the contentWidth
   const sumOfTheirMinWidths = schemas.reduce(
     (acc, child) => acc + child.minWidth,
     0

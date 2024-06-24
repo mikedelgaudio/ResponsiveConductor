@@ -32,9 +32,6 @@ export function ResponsiveConductor(
     const elements = children.map((child, childIndex) => {
       const { element } = child;
 
-      // We need to map the columnSizesSortedFromHighestToLowest to the correct array position in the outputColumns array
-      // The outputColumns array is the final array that contains the width of each column in the grid, matching the order of the children
-      // TODO Remove
       const columnSize = columnsSizes[childIndex];
 
       if (!columnSize) {
