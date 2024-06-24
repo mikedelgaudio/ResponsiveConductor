@@ -2,25 +2,29 @@ import { IResponsiveConductorSchema } from "../IResponsiveConductor";
 const DEBUG = true;
 
 /**
- * Helper function to get total width of an array of widths
- * @param widths An array of numbers representing widths
- * @returns The total width of the array
- */
-function getTotalWidth(widths: number[]): number {
-  return widths.reduce((acc, width) => acc + width, 0);
-}
-
-/**
  * Helper function to determine if the schemas have any errors in their input for Debug mode
  * @param schemas The schemas for the controls
  */
 function determineColumnWidthsDebugs(
+  contentWidth: number,
   schemas: IResponsiveConductorSchema[]
 ): void {
   if (!DEBUG) {
     // If not in debug mode, return early
     return;
   }
+
+  const sumOfTheirMinWidths = schemas.reduce(
+    (acc, child) => acc + child.minWidth,
+    0
+  );
+
+  if (sumOfTheirMinWidths > contentWidth) {
+    throw new Error(
+      "[ResponsiveConductor] You cannot have minWidths larger than the contentSize, overflow expected!"
+    );
+  }
+
   // Check if any of the schemas have a minWidth larger than maxWidth
   schemas.some((schema) => {
     if (schema.minWidth > schema.maxWidth) {
@@ -82,7 +86,7 @@ export function determineColumnWidths(
 
   // Check for errors in the schemas if in DEBUG mode
   if (DEBUG) {
-    determineColumnWidthsDebugs(schemas);
+    determineColumnWidthsDebugs(contentWidth, schemas);
   }
 
   // Separate schemas into visible and hidden based on the isAllowedToHide flag
@@ -102,7 +106,11 @@ export function determineColumnWidths(
 
   // Calculate initial widths for visible schemas based on max width O(n)
   let initialWidths = visibleSchemas.map((schema) => schema.maxWidth);
-  let remainingContentWidth = contentWidth - getTotalWidth(initialWidths);
+  const totalInitialWidth = initialWidths.reduce(
+    (acc, width) => acc + width,
+    0
+  );
+  let remainingContentWidth = contentWidth - totalInitialWidth;
 
   // Shrink elements based on priority if needed to fit within content width O(n)
   if (remainingContentWidth < 0) {
